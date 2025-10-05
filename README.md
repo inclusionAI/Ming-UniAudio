@@ -701,12 +701,14 @@ Step 1 - Download the source code
 ```
 git clone	https://github.com/inclusionAI/Ming-UniAudio
 cd Ming-UniAudio
+uv sync
 ```
 Step 2 - Download the Ming-UniAudio model weights and create a soft link to the source code directory
 
 Download our model following `Model & Benchmark Downloads`
 
 ```shell
+hf download inclusionAI/Ming-UniAudio-16B-A3B
 mkdir inclusionAI 
 ln -s /path/to/inclusionAI/Ming-UniAudio-16B-A3B inclusionAI/Ming-UniAudio-16B-A3B
 ```
