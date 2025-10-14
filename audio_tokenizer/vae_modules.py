@@ -80,11 +80,12 @@ class Decoder(nn.Module):
 
         return x, unified_emb
 
-    def low_level_reconstruct(self, x):     
+    def low_level_reconstruct(self, x, past_key_values=None, use_cache=False, audio_buffer=None, window_buffer=None, last_chunk=False):
         x = self.fc1(x)
-        x = self.decoder(inputs_embeds=x)
-        x = x.last_hidden_state
+        outputs = self.decoder(inputs_embeds=x, past_key_values=past_key_values, use_cache=use_cache)
+        past_key_values = outputs.past_key_values
+        x = outputs.last_hidden_state
 
-        x, _ = self.head(x)
+        x, _, audio_buffer, window_buffer = self.head(x, streaming=use_cache, audio_buffer=audio_buffer, window_buffer=window_buffer, last_chunk=last_chunk)
 
-        return x
+        return x, audio_buffer, window_buffer, past_key_values

@@ -28,13 +28,47 @@ class ISTFT(nn.Module):
         window = torch.hann_window(win_length)
         self.register_buffer("window", window)
 
-    def forward(self, spec: torch.Tensor) -> torch.Tensor:
+        self.audio_buffer = None
+        self.window_buffer = None
+        self.buffer_len = self.win_length - self.hop_length
+
+    def __buffer_process(self, x, buffer, pad, last_chunk=False, streaming=False):
+        if streaming:
+            if buffer is None:
+                # first chunk
+                x = x[:, pad:]
+            if buffer is not None:
+                # next chunk
+                x[:, :self.buffer_len] += buffer
+            buffer = x[:, -self.buffer_len:]
+            if not last_chunk:
+                x = x[:, :-self.buffer_len]
+            else:
+                x = x[:, :-pad]
+        else:
+            x = x[:, pad:-pad]
+
+        return x, buffer
+
+    def forward(
+        self,
+        spec: torch.Tensor,
+        audio_buffer=None,
+        window_buffer=None,
+        streaming=False,
+        last_chunk=False
+    ):
         """
         Compute the Inverse Short Time Fourier Transform (ISTFT) of a complex spectrogram.
 
         Args:
             spec (Tensor): Input complex spectrogram of shape (B, N, T), where B is the batch size,
                             N is the number of frequency bins, and T is the number of time frames.
+            audio_buffer (Tensor): [Streaming Input/State] The audio overlap buffer from the previous chunk.
+                            Shape: (B, win_length - hop_length)
+            window_buffer (Tensor): [Streaming Input/State] The window overlap buffer from the previous chunk.
+            streaming: If `True`, the function operates in streaming mode, processing `spec` as a single chunk.
+            last_chunk: When `streaming=True` and `last_chunk=True`, the function can perform final "flush" operations
 
         Returns:
             Tensor: Reconstructed time-domain signal of shape (B, L), where L is the length of the output signal.
@@ -58,20 +92,24 @@ class ISTFT(nn.Module):
         output_size = (T - 1) * self.hop_length + self.win_length
         y = torch.nn.functional.fold(
             ifft, output_size=(1, output_size), kernel_size=(1, self.win_length), stride=(1, self.hop_length),
-        )[:, 0, 0, pad:-pad]
+        )[:, 0, 0, :]
+
+        y, audio_buffer = self.__buffer_process(y, audio_buffer, pad, last_chunk=last_chunk, streaming=streaming)
 
         # Window envelope
         window_sq = self.window.square().expand(1, T, -1).transpose(1, 2)
         window_envelope = torch.nn.functional.fold(
             window_sq, output_size=(1, output_size), kernel_size=(1, self.win_length), stride=(1, self.hop_length),
-        ).squeeze()[pad:-pad]
+        ).squeeze(0).squeeze(0)
+
+        window_envelope, window_buffer = self.__buffer_process(window_envelope, window_buffer, pad, last_chunk=last_chunk, streaming=streaming)
+        window_envelope = window_envelope.squeeze()
 
         # Normalize
         assert (window_envelope > 1e-11).all()
         y = y / window_envelope
 
-        return y
-
+        return y, audio_buffer, window_buffer
 
 class FourierHead(nn.Module):
     """Base class for inverse fourier modules."""
@@ -106,7 +144,14 @@ class ISTFTHead(FourierHead):
         self.out = torch.nn.Linear(dim, out_dim)
         self.istft = ISTFT(n_fft=n_fft, hop_length=hop_length, win_length=n_fft, padding=padding)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        audio_buffer=None,
+        window_buffer=None,
+        streaming=False,
+        last_chunk=False
+    ):
         """
         Forward pass of the ISTFTHead module.
 
@@ -132,5 +177,5 @@ class ISTFTHead(FourierHead):
         # S = mag * torch.exp(phase * 1j)
         # better directly produce the complex value
         S = mag * (x + 1j * y)
-        audio = self.istft(S)
-        return audio.unsqueeze(1),x_pred
+        audio, audio_buffer, window_buffer = self.istft(S, audio_buffer=audio_buffer, window_buffer=window_buffer, streaming=streaming, last_chunk=last_chunk)
+        return audio.unsqueeze(1),x_pred, audio_buffer, window_buffer

@@ -570,6 +570,14 @@ class BailingMMNativeForConditionalGeneration(PreTrainedModel):
 
             sampled_token_latent,  trajectory= self.flowloss.sample(z_diff, latent_history, cfg, patch_size)
             result.append(sampled_token_latent)
+            if self.stop_head(z_diff)[0][0].softmax(dim=-1)[1]>0.5 and step > 16:
+                if not stop_flag:
+                    print(f'StopInfo: {step} {num_iter-1}')
+                    stop_flag = True
+                yield sampled_token_latent, True
+                break
+            else:
+                yield sampled_token_latent, False
 
             sampled_token_high_latent, tok_past_key_values = self.audio.encode_unified_emb_from_latent(sampled_token_latent.reshape(bsz, -1, z_dim), past_key_values=tok_past_key_values, use_cache=True)
             sampled_token_high_latent = sampled_token_high_latent.reshape(-1, patch_size, sampled_token_high_latent.shape[-1])
@@ -593,16 +601,10 @@ class BailingMMNativeForConditionalGeneration(PreTrainedModel):
                 
             attention_mask = torch.ones(inputs_embeds.shape[0], 1).to(inputs_embeds.device)
             latent_history = sampled_token_latent
-            if self.stop_head(z_diff)[0][0].softmax(dim=-1)[1]>0.5 and step > 16:
-                if not stop_flag:
-                    print(f'StopInfo: {step} {num_iter-1}')
-                    stop_flag = True
-                break
+
         if not stop_flag:
             print(f'StopInfo: {step} {num_iter-1}')
             stop_flag = True
-            
-        return result
 
     @torch.inference_mode()
     def generate_tts(
@@ -636,21 +638,33 @@ class BailingMMNativeForConditionalGeneration(PreTrainedModel):
             "prompt_text": prompt_text,
             "patch_size": patch_size,
         }
-        
+        audio_buffer = None
+        window_buffer = None
+        past_key_values = None
+        use_cache = True
+        speech = []
+        # sampled_tokens_list = []
         with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
-            sampled_tokens = self.sample_tokens(
+            for sampled_tokens, last_chunk in self.sample_tokens(
                 text=text,
                 lang=lang,
                 num_iter=num_iter, 
                 cfg=cfg,
                 progress=progress,
                 **kwargs
-            )
-        sampled_tokens = torch.cat(sampled_tokens, dim = 1)
-        
-        with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
-            speech = self.audio.decode(sampled_tokens)
+            ):
+                speech_tmp, audio_buffer, window_buffer, past_key_values = self.audio.decode(sampled_tokens, past_key_values=past_key_values, use_cache=use_cache, audio_buffer=audio_buffer, window_buffer=window_buffer, last_chunk=last_chunk)
+                speech.append(speech_tmp)
+                # sampled_tokens_list.append(sampled_tokens)
+
+        speech = torch.cat(speech, dim=-1)
         torchaudio.save(output_wav_path, speech.cpu()[0], sample_rate=sample_rate)
+
+        # for non-streaming decode
+        # sampled_tokens = torch.cat(sampled_tokens_list, dim=1)
+        # with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+        #     speech = self.audio.decode(sampled_tokens, past_key_values=None, use_cache=False)[0]
+        # torchaudio.save(output_wav_path, speech.cpu()[0], sample_rate=sample_rate)
 
         return speech.cpu()[0]
 

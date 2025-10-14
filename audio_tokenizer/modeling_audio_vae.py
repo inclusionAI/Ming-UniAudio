@@ -115,7 +115,7 @@ class AudioVAE(PreTrainedModel):
         return unified_emb, latent, frame_num
 
     @torch.inference_mode()
-    def decode(self, latent):
+    def decode(self, latent, past_key_values=None, use_cache=False, audio_buffer=None, window_buffer=None, last_chunk=False):
         """
         Reconstructs the raw audio waveform from its acoustic latent representation.
         Args:
@@ -124,5 +124,5 @@ class AudioVAE(PreTrainedModel):
         Returns:
             The reconstructed raw audio waveform, shape: (B, T_wav)
         """
-        waveform = self.decoder.low_level_reconstruct(latent)
-        return waveform
+        waveform, audio_buffer, window_buffer, past_key_values = self.decoder.low_level_reconstruct(latent, past_key_values=past_key_values, use_cache=use_cache, audio_buffer=audio_buffer, window_buffer=window_buffer, last_chunk=last_chunk)
+        return waveform, audio_buffer, window_buffer, past_key_values
