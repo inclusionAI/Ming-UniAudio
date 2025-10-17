@@ -677,20 +677,23 @@ pip install -r requirements.txt
 
 ### Installation with docker
 
-You can also initialize the environment by building the docker image. First clone this repository:
-```shell
-git clone --depth 1 https://github.com/inclusionAI/Ming-UniAudio
-cd Ming-UniAudio
+You can set up the environment using Docker in two ways.
+- Option 1: Pull from Docker Hub (**Recommended**)
+```bash
+# 1. Pull the pre-built image
+docker pull yongjielv/ming_uniaudio:v1.0
+
+# 2. Run the container
+docker run -it --gpus all yongjielv/ming_uniaudio:v1.0 /bin/bash
 ```
-Then build the docker image with the provided Dockerfile in `docker/docker-py310-cu121`. This step might take a while:
-```shell
-docker build -t ming:py310-cu121 docker/docker-py310-cu121
+- Option 2: Build from Source
+``` bash
+# 1. Build the image
+docker build -t ming-uniaudio:v1.0 -f ./docker/ming_uniaudio.dockerfile .
+
+# 2. Run the container
+docker run -it --gpus all ming-uniaudio:v1.0 /bin/bash
 ```
-At last, start the container with the current repo directory mounted:
-```shell
-docker run -it --gpus all -v "$(pwd)":/workspace/Ming-UniAudio ming:py310-cu121 ming:py310-cu121 /bin/bash
-```
-You can run the model with python interface. You may download the huggingface model in the repo directory first (`.../Ming-UniAudio/`) or mount the downloaded model path when starting the container.
 
 
 ## Example Usage
