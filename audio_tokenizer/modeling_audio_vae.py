@@ -1,5 +1,5 @@
-from diffusers.models.autoencoders.autoencoder_oobleck import OobleckDiagonalGaussianDistribution
 from transformers import PreTrainedModel
+from .oobleck_distribution import OobleckDiagonalGaussianDistribution
 import torch
 import torch.nn as nn
 
