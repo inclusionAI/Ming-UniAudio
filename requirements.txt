@@ -9,7 +9,7 @@ diffusers==0.33.0
 decord==0.6.0
 hyperpyyaml==1.2.2
 soundfile==0.12.1
-transformers==4.52.4
+transformers==5.10.1
 # flash_attn==2.7.0  # to accelerate installation process, please download wheel package by `wget https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.0.post1/flash_attn-2.7.0.post1+cu12torch2.4cxx11abiFALSE-cp310-cp310-linux_x86_64.whl`
 x_transformers
 torchdiffeq
